@@ -15,3 +15,5 @@ with st.container(border=True):
         st.write(f"나의 가맹점 정보: 아직 가맹점을 유추하지 않았습니다!")
         st.caption("브랜드 식별 페이지에서 가맹점을 설정해보세요!")
         st.button("브랜드 식별 페이지로 이동", use_container_width=True)
+        if st.button("로그아웃", use_container_width=True):
+            st.logout()

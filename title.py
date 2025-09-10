@@ -1,4 +1,12 @@
 import streamlit as st
+# from google.cloud import firestore
+# from google.oauth2 import service_account
+
+# @st.cache_resource
+# def get_db():
+#     creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
+#     return firestore.Client(project=st.secrets["gcp_project_id"], credentials=creds)
+# db = get_db()
 
 st.title("신한카드와 함께하는 소상공인 비밀상담소")
 st.subheader("#우리동네 #숨은맛집 #소상공인 #마케팅 #전략")
@@ -17,3 +25,7 @@ with st.container(border=True):
         st.button("브랜드 식별 페이지로 이동", use_container_width=True)
         if st.button("로그아웃", use_container_width=True):
             st.logout()
+
+    # if st.button("데이터 추가 테스트"):
+    #     user_ref = db.collection("user").document(st.user.sub)
+    #     user_ref.set({"test": "테스트 추가"})

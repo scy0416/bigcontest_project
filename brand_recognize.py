@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from components import *
+from uuid import uuid4
 
 # 브랜드와 업계 졍보 초기화
 st.session_state['brand'] = None
@@ -123,4 +124,5 @@ with selected:
             date = str(st.session_state['selected_brand']['개설일'])
             st.write(f"{date[:4]}년 {date[4:6]}월 {date[6:]}일")
             if st.button("마케팅 상담 시작", use_container_width=True):
+                st.session_state["session_id"] = str(uuid4())
                 st.switch_page("marketing_chatbot.py")

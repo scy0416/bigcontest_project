@@ -211,7 +211,10 @@ with col3:
 same_work_brands = df1[(df1["HPSN_MCT_ZCD_NM"]==st.session_state["selected_brand"]["업종"]) & (df1["ENCODED_MCT"]!=st.session_state["selected_brand"]["식별코드"])]
 same_work_brands_code = same_work_brands["ENCODED_MCT"].tolist()
 if "selected_work_brands" not in st.session_state:
-    st.session_state["selected_work_brands"] = random.sample(same_work_brands_code, 20)
+    if len(same_work_brands_code) >= 20:
+        st.session_state["selected_work_brands"] = random.sample(same_work_brands_code, 20)
+    else:
+        st.session_state["selected_work_brands"] = same_work_brands_code
 
 # 동종업계의 월별 이용 정보 추출
 same_work_brands_monthly_usage_info = df2[df2["ENCODED_MCT"].isin(st.session_state["selected_work_brands"])]

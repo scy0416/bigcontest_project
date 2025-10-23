@@ -11,5 +11,5 @@ pages = {
     ]
 }
 
-pg = st.navigation(pages, position="top")
+pg = st.navigation(pages, position="hidden")
 pg.run()

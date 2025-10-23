@@ -4,6 +4,7 @@ import pandas as pd
 from uuid import uuid4
 import xml.parsers.expat as expat
 from pydantic import Field, BaseModel
+import random
 
 from typing import List, TypedDict, Dict, Literal
 from langgraph.graph import StateGraph, START, END
@@ -176,9 +177,10 @@ init_sidebar()
 if 'selected_brand' not in st.session_state:
     st.switch_page("title.py")
 
-st.set_page_config(layout="centered")
+st.set_page_config(layout="wide")
 
 st.header("마케팅 챗봇")
+st.warning("새로고침을 하면 대화내역이 유지되지 않습니다! 유의해주세요!")
 st.badge(f"세션id: {st.session_state['session_id']}")
 
 df1, df2, df3 = load_data()
@@ -201,6 +203,7 @@ col1, col2, col3 = st.columns(3, border=True)
 with col1:
     st.write("**데이터 분석가**")
     st.write("역할: 데이터 분석/인사이트 제공")
+
 with col2:
     st.write("**CRM 마케터**")
     st.write("역할: 고객 세분화/재방문 유도")
@@ -208,21 +211,14 @@ with col3:
     st.write("**퍼포먼스 마케터**")
     st.write("역할: 광고 전략 추천/최적화")
 
-#st.write("가맹점의 월별 이용 정보")
-#st.write(monthly_usage_info)
-#st.write("가맹점의 월별 소비자 이용 정보")
-#st.write(monthly_usage_consumer_info)
-#st.write("가맹점의 동종업계 가맹점들")
+# 동종업계 브랜드 리스트업
 same_work_brands = df1[(df1["HPSN_MCT_ZCD_NM"]==st.session_state["selected_brand"]["업종"]) & (df1["ENCODED_MCT"]!=st.session_state["selected_brand"]["식별코드"])]
-#st.write(same_work_brands)
 same_work_brands_code = same_work_brands["ENCODED_MCT"].tolist()
-#st.write(same_work_brands_code)
-#st.write("가맹점의 동종업계 이용 정보")
-same_work_brands_monthly_usage_info = df2[df2["ENCODED_MCT"].isin(same_work_brands_code)]
-#st.write(same_work_brands_monthly_usage_info)
-#st.write("가맹점의 동종업계 소비자 이용 정보")
-same_work_brands_monthly_usage_consumer_info = df3[df3["ENCODED_MCT"].isin(same_work_brands_code)]
-#st.write(same_work_brands_monthly_usage_consumer_info)
+if "selected_work_brands" not in st.session_state:
+    st.session_state["selected_work_brands"] = random.sample(same_work_brands_code, 20)
+
+same_work_brands_monthly_usage_info = df2[df2["ENCODED_MCT"].isin(st.session_state["selected_work_brands"])]
+same_work_brands_monthly_usage_consumer_info = df3[df3["ENCODED_MCT"].isin(st.session_state["selected_work_brands"])]
 
 config = {"configurable": {"thread_id": st.session_state["session_id"]}}
 

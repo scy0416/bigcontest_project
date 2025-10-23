@@ -3,17 +3,22 @@ from components import *
 import pandas as pd
 from uuid import uuid4
 import xml.parsers.expat as expat
-from pydantic import Field, BaseModel
+from pydantic import BaseModel
 import random
 
 from typing import List, TypedDict, Dict, Literal
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import StateGraph, START
 from langgraph.checkpoint.memory import MemorySaver
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, AIMessageChunk
-from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate, MessagesPlaceholder
+from langchain_core.messages import HumanMessage, AIMessage, AIMessageChunk
+from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, MessagesPlaceholder
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.types import Command, interrupt
 
+# 선택된 가맹점이 없는 경우 타이틀로 이동
+if 'selected_brand' not in st.session_state:
+    st.switch_page("title.py")
+
+# 데이터들 전부 로드
 @st.cache_resource
 def load_data():
     df1 = pd.read_csv("dataset/big_data_set1_f.csv", encoding="cp949")
@@ -21,15 +26,18 @@ def load_data():
     df3 = pd.read_csv("dataset/big_data_set3_f.csv", encoding="cp949")
     return df1, df2, df3
 
+# 세션id초기화
 if "session_id" not in st.session_state:
     st.session_state["session_id"] = str(uuid4())
 
+# 제미나이 생성
 llm = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash",
     google_api_key=st.secrets["GOOGLE_API_KEY"],
     temperature=0.1,
 )
 
+# 각종 페르소나 정의
 persona = {
     "Data Scientist": """당신은 마케팅 데이터 분석가입니다. 제공되는 데이터를 기반으로 현재 가맹점의 장점, 단점, 인사이트 등을 명확한 근거와 함께 제공해주세요.
 각 주장을 할 때마다 명확한 데이터를 근거로 제시해야 하며, 근거는 마크다운 표로 작성해주세요.""",
@@ -37,15 +45,17 @@ persona = {
     "Performance Marketer": """당신은 퍼포먼스 마케터입니다. 사용자 요청에 따른 광고를 기획해주세요. 충분한 정보가 주어지지 않았다면 사용자에게 추가 정보를 요구하세요."""
 }
 
+# 상태그래프의 상태
 class State(TypedDict):
-    history: List
-    brand_info: Dict
-    monthly_usage_info: str
-    monthly_usage_consumer_info: str
-    same_work_brands_monthly_usage_info: str
-    same_work_brands_monthly_usage_consumer_info: str
-    speaker: str
+    history: List                                       # 대화내역
+    brand_info: Dict                                    # 가맹점 정보
+    monthly_usage_info: str                             # 타겟 가맹점 월별 이용 정보
+    monthly_usage_consumer_info: str                    # 타겟 가맹점 월별 이용 고객정보
+    same_work_brands_monthly_usage_info: str            # 동종 업계 월별 이용 정보
+    same_work_brands_monthly_usage_consumer_info: str   # 동종 업계 월별 이용 고객정보
+    speaker: str                                        # 말하는 페르소나
 
+# 프롬프트 템플릿
 prompt_template = """{persona}
 ### 주의점
 주장에는 자료에 기반한 명확한 근거를 제시해야합니다.
@@ -63,41 +73,18 @@ prompt_template = """{persona}
 ### 동종 업계 월별 이용 고객정보
 {same_work_brands_monthly_usage_consumer_info}"""
 
-# def init_analyze(state: State):
-#     state["speaker"] = "Data Scientist"
-#     prompt = ChatPromptTemplate.from_messages([
-#         SystemMessagePromptTemplate.from_template(prompt_template),
-#         MessagesPlaceholder("history")
-#     ])
-#
-#     prompt = prompt.invoke({
-#         "persona": persona["Data Scientist"],
-#         "brand_name": state["brand_info"]["이름"],
-#         "brand_work": state["brand_info"]["업종"],
-#         "brand_area": state["brand_info"]["지역"],
-#         "brand_open": state["brand_info"]["개설일"],
-#         "monthly_usage_info": state["monthly_usage_info"],
-#         "monthly_usage_consumer_info": state["monthly_usage_consumer_info"],
-#         "same_work_brands_monthly_usage_info": state["same_work_brands_monthly_usage_info"],
-#         "same_work_brands_monthly_usage_consumer_info": state["same_work_brands_monthly_usage_consumer_info"],
-#         "speaker": state["speaker"],
-#         "history": state["history"]
-#     })
-#
-#     response = llm.invoke(prompt)
-#
-#     state["history"].append(AIMessage(content=response.content))
-#     return state
-
+# 사용자 입력 노드(인터럽트 발생)
 def user_input(state: State):
     payload = interrupt({})
     user_text = payload["text"]
     state["history"].append(HumanMessage(content=user_text))
     return state
 
+# 전문가 페르소나 구조
 class SpeakerSelect(BaseModel):
     speaker: Literal["Data Scientist", "CRM Marketer", "Performance Marketer"]
 
+# 발화자 선정 노드
 def speaker_select(state: State):
     prompt = ChatPromptTemplate.from_messages([
         SystemMessagePromptTemplate.from_template("""당신은 대화대역을 보고서 발화를 할 전문가를 선택하는 중재자입니다.
@@ -109,10 +96,13 @@ Performance Marketer의 역할은 광고 전략 추천/최적화입니다.
         MessagesPlaceholder("history")
     ])
     prompt = prompt.invoke({"history": state["history"]})
+    # SpeakerSelect구조대로 출력
     response = llm.with_structured_output(SpeakerSelect).invoke(prompt)
+    # 발화자 설정
     state["speaker"] = response.speaker
     return state
 
+# 답변 생성
 def make_response(state: State):
     prompt = ChatPromptTemplate.from_messages([
         SystemMessagePromptTemplate.from_template(prompt_template),
@@ -137,45 +127,45 @@ def make_response(state: State):
         "history": state["history"]
     })
 
-    # response = llm.invoke(prompt)
+    # 태그가 제대로 닫히도록 처리
     buffer = ""
     for chunk in llm.stream(prompt):
-        #print('"', chunk.content, '"')
         buffer += chunk.content
         if "</DIALOGUE>" in buffer:
             break
     response = buffer
 
-    #state["history"].append(AIMessage(content=response.content))
+    # 답변 대화내역에 추가
     state["history"].append(AIMessage(content=response))
     return state
 
+# 그래프 생성자 생성
 graph_builder = StateGraph(State)
-#graph_builder.add_node("초기 분석", init_analyze)
+
+# 그래프 노드 추가
 graph_builder.add_node("사용자 입력", user_input)
 graph_builder.add_node("전문가 선정", speaker_select)
 graph_builder.add_node("답변 생성", make_response)
 
-#graph_builder.add_edge(START, "초기 분석")
-#graph_builder.add_edge("초기 분석", "사용자 입력")
+# 그래프 에지 설정
 graph_builder.add_edge(START, "사용자 입력")
 graph_builder.add_edge("사용자 입력", "전문가 선정")
 graph_builder.add_edge("전문가 선정", "답변 생성")
 graph_builder.add_edge("답변 생성", "사용자 입력")
 
-#saver = MemorySaver()
+# 메모리 세이버 초기화(rerun할 때마다 초기화 방지)
 saver = None
 if "saver" not in st.session_state:
     st.session_state["saver"] = MemorySaver()
     saver = st.session_state["saver"]
 else:
     saver = st.session_state["saver"]
+
+# 그래프 컨파일
 graph = graph_builder.compile(checkpointer=saver)
 
+# 사이드바 초기화
 init_sidebar()
-
-if 'selected_brand' not in st.session_state:
-    st.switch_page("title.py")
 
 st.set_page_config(layout="wide")
 
@@ -183,10 +173,15 @@ st.header("마케팅 챗봇")
 st.warning("새로고침을 하면 대화내역이 유지되지 않습니다! 유의해주세요!")
 st.badge(f"세션id: {st.session_state['session_id']}")
 
+# 데이터 로드
 df1, df2, df3 = load_data()
+
+# 가맹점 월별 이용 정보 추출
 monthly_usage_info = df2[df2["ENCODED_MCT"]==st.session_state["selected_brand"]["식별코드"]]
+# 가맹점 월별 이용 고객정보 추출
 monthly_usage_consumer_info = df3[df3["ENCODED_MCT"]==st.session_state["selected_brand"]["식별코드"]]
 
+# 선택된 가맹점 출력
 with st.expander("선택된 가맹점 정보"):
     st.subheader("가맹점명")
     st.write(st.session_state['selected_brand']['이름'])
@@ -198,12 +193,13 @@ with st.expander("선택된 가맹점 정보"):
     date = str(st.session_state['selected_brand']['개설일'])
     st.write(f"{date[:4]}년 {date[4:6]}월 {date[6:]}일")
 
+# 페르소나 설명 파트
 st.subheader("준비된 전문가 페르소나")
 col1, col2, col3 = st.columns(3, border=True)
 with col1:
     st.write("**데이터 분석가**")
     st.write("역할: 데이터 분석/인사이트 제공")
-
+    st.info("분석할 때 시간이 오래걸릴 수 있습니다! 주의하세요!")
 with col2:
     st.write("**CRM 마케터**")
     st.write("역할: 고객 세분화/재방문 유도")
@@ -217,14 +213,19 @@ same_work_brands_code = same_work_brands["ENCODED_MCT"].tolist()
 if "selected_work_brands" not in st.session_state:
     st.session_state["selected_work_brands"] = random.sample(same_work_brands_code, 20)
 
+# 동종업계의 월별 이용 정보 추출
 same_work_brands_monthly_usage_info = df2[df2["ENCODED_MCT"].isin(st.session_state["selected_work_brands"])]
+# 동종업계의 월별 이용 고객정보 추출
 same_work_brands_monthly_usage_consumer_info = df3[df3["ENCODED_MCT"].isin(st.session_state["selected_work_brands"])]
 
+# config정보
 config = {"configurable": {"thread_id": st.session_state["session_id"]}}
 
+# 체크포인트 유뮤 확인
 tup = saver.get_tuple(config)
 exists_latest = (tup is not None)
 
+# 체크포인트 정보 없으면 초기화
 if not exists_latest:
     graph.invoke(State(
         history=[],
@@ -236,71 +237,103 @@ if not exists_latest:
         speaker=""
     ), config)
 
+# 체크포인트 정보 추출
 config, checkpoint, metadata, parent_config, pending_writes = saver.get_tuple(config)
 
+# 채팅 내역이 출력되는 컨테이너
 chat_container = st.container(border=True)
 
+# 버퍼와 플레이스 홀더
 buffer = ""
 placeholder = None
 
+# 태그 시작 콜백 함수
 def on_start(name, attrs):
     if name != 'DIALOGUE':
         return
     global placeholder, buffer
+    # 발화자 이름으로 chat_message 열고 버퍼에 화자 정보 추가
     placeholder = chat_container.chat_message(attrs["speaker"]).empty()
     buffer += f'{attrs["speaker"]}: '
 
+# 태그 종료 콜백 함수
 def on_end(name):
     if name != 'DIALOGUE':
         return
     global buffer, placeholder
+    # 버퍼 및 플레이스홀더 초기화
     buffer = ""
     placeholder = None
 
+# 텍스트 처리 콜백 함수
 def on_text(data):
     global buffer, placeholder
+    # 버퍼에 추가 후 플레이스홀더에 출력
     buffer += data
     placeholder.markdown(buffer)
 
+# 이전 대화 내역 출력
 for message in checkpoint["channel_values"]["history"]:
+    # 파서 생성
     parser = expat.ParserCreate("utf-8")
+    # 파서의 콜백 함수 설정
     parser.StartElementHandler = on_start
     parser.CharacterDataHandler = on_text
     parser.EndElementHandler = on_end
+
+    # 유저의 메시지면 직접 출력
     if isinstance(message, HumanMessage):
         chat_container.chat_message("user").markdown(message.content)
-    else:
+    else:   # AI의 메시지면 파서로 처리
         parser.Parse(message.content)
 
+# 인터럽트 중인 경우
 if pending_writes and any("__interrupt__" in w for w in pending_writes):
+    # 인터럽트 중인 노드 이름 추출
     node_name = checkpoint["updated_channels"][0][10:]
+    # 인터럽트 중인 노드가 사용자 입력 노드인 경우
     if node_name == "사용자 입력":
+        # 입력 처리
         prompt = st.chat_input()
         if prompt:
+            # 파서 생성
             parser = expat.ParserCreate("utf-8")
+            # 파서 콜백 함수 설정
             parser.StartElementHandler = on_start
             parser.CharacterDataHandler = on_text
             parser.EndElementHandler = on_end
 
+            # 루트 파싱 시작(없으면 문제 발생)
             parser.Parse("<ROOT>", False)
 
+            # 사용자의 메시지 출력
             chat_container.chat_message("user").markdown(prompt)
+            # 사용자 입력 인터럽트 재개 커맨드
             cmd = Command(resume={"text": prompt})
 
+            # 스트리밍으로 챗봇 재개
             for event in graph.stream(cmd, config, stream_mode="messages"):
                 node_name = event[1].get("langgraph_node")
+                # 답변 생성의 청크만 처리
                 if node_name == "답변 생성":
+                    # AIMessageChunk만 처리하고 AIMessage는 무시
                     if not isinstance(event[0], AIMessageChunk):
                         continue
+                    # 청크 추출
                     chunk = event[0].content or ""
-                    #print(chunk)
+
+                    # 청크가 없는 경우
                     if not chunk:
                         continue
 
+                    # 파서로 파싱
                     parser.Parse(chunk, False)
+
+            # 파싱 종료
             parser.Parse("</ROOT>", True)
-            #st.rerun()
+# 꼬여서 인터럽트 중이 아닌 경우
 else:
     st.chat_input(disabled=True)
+    # 인터럼트 발생시점까지 진행
     graph.invoke(None, config)
     st.rerun()

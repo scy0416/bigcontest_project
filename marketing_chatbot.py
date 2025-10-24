@@ -216,7 +216,7 @@ same_work_brands = df1[(df1["HPSN_MCT_ZCD_NM"]==st.session_state["selected_brand
 same_work_brands_code = same_work_brands["ENCODED_MCT"].tolist()
 if "selected_work_brands" not in st.session_state:
     if len(same_work_brands_code) >= 20:
-        st.session_state["selected_work_brands"] = random.sample(same_work_brands_code, 20)
+        st.session_state["selected_work_brands"] = random.sample(same_work_brands_code, 10)
     else:
         st.session_state["selected_work_brands"] = same_work_brands_code
 

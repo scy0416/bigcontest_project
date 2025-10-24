@@ -18,6 +18,10 @@ from langgraph.types import Command, interrupt
 if 'selected_brand' not in st.session_state:
     st.switch_page("title.py")
 
+if "error" in st.session_state:
+    st.toast("예기치 못한 문제가 발생하여 이전 상태로 되돌렸습니다. 계속해서 진행해주세요.")
+    del(st.session_state["error"])
+
 # 데이터들 전부 로드
 @st.cache_resource
 def load_data():
@@ -336,10 +340,12 @@ if pending_writes and any("__interrupt__" in w for w in pending_writes):
                 # 파싱 종료
                 parser.Parse("</ROOT>", True)
             except Exception:   # 문제가 발생하는 경우
+                print("문제가 발생했습니다.")
                 st.toast("문제가 발생했습니다! 조금만 대기해주세요!")
                 config, checkpoint, metadata, parent_config, pending_writes = saver.get_tuple(config)
                 graph.invoke(None, parent_config)
                 st.toast("회복을 시도합니다. 여전히 문제가 있다면 챗봇을 다시 시작해주세요.")
+                st.session_state["error"] = True
                 st.rerun()
 # 꼬여서 인터럽트 중이 아닌 경우
 else:

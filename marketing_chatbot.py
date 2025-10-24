@@ -299,41 +299,48 @@ if pending_writes and any("__interrupt__" in w for w in pending_writes):
         # 입력 처리
         prompt = st.chat_input()
         if prompt:
-            # 파서 생성
-            parser = expat.ParserCreate("utf-8")
-            # 파서 콜백 함수 설정
-            parser.StartElementHandler = on_start
-            parser.CharacterDataHandler = on_text
-            parser.EndElementHandler = on_end
+            try:
+                # 파서 생성
+                parser = expat.ParserCreate("utf-8")
+                # 파서 콜백 함수 설정
+                parser.StartElementHandler = on_start
+                parser.CharacterDataHandler = on_text
+                parser.EndElementHandler = on_end
 
-            # 루트 파싱 시작(없으면 문제 발생)
-            parser.Parse("<ROOT>", False)
+                # 루트 파싱 시작(없으면 문제 발생)
+                parser.Parse("<ROOT>", False)
 
-            # 사용자의 메시지 출력
-            chat_container.chat_message("user").markdown(prompt)
-            # 사용자 입력 인터럽트 재개 커맨드
-            cmd = Command(resume={"text": prompt})
+                # 사용자의 메시지 출력
+                chat_container.chat_message("user").markdown(prompt)
+                # 사용자 입력 인터럽트 재개 커맨드
+                cmd = Command(resume={"text": prompt})
 
-            # 스트리밍으로 챗봇 재개
-            for event in graph.stream(cmd, config, stream_mode="messages"):
-                node_name = event[1].get("langgraph_node")
-                # 답변 생성의 청크만 처리
-                if node_name == "답변 생성":
-                    # AIMessageChunk만 처리하고 AIMessage는 무시
-                    if not isinstance(event[0], AIMessageChunk):
-                        continue
-                    # 청크 추출
-                    chunk = event[0].content or ""
+                # 스트리밍으로 챗봇 재개
+                for event in graph.stream(cmd, config, stream_mode="messages"):
+                    node_name = event[1].get("langgraph_node")
+                    # 답변 생성의 청크만 처리
+                    if node_name == "답변 생성":
+                        # AIMessageChunk만 처리하고 AIMessage는 무시
+                        if not isinstance(event[0], AIMessageChunk):
+                            continue
+                        # 청크 추출
+                        chunk = event[0].content or ""
 
-                    # 청크가 없는 경우
-                    if not chunk:
-                        continue
+                        # 청크가 없는 경우
+                        if not chunk:
+                            continue
 
-                    # 파서로 파싱
-                    parser.Parse(chunk, False)
+                        # 파서로 파싱
+                        parser.Parse(chunk, False)
 
-            # 파싱 종료
-            parser.Parse("</ROOT>", True)
+                # 파싱 종료
+                parser.Parse("</ROOT>", True)
+            except Exception:   # 문제가 발생하는 경우
+                st.toast("문제가 발생했습니다! 조금만 대기해주세요!")
+                config, checkpoint, metadata, parent_config, pending_writes = saver.get_tuple(config)
+                graph.invoke(None, parent_config)
+                st.toast("회복을 시도합니다. 여전히 문제가 있다면 챗봇을 다시 시작해주세요.")
+                st.rerun()
 # 꼬여서 인터럽트 중이 아닌 경우
 else:
     st.chat_input(disabled=True)
